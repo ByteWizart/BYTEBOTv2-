@@ -7,10 +7,9 @@ const loggers = require('./logging.js');
 const logger = loggers.logger;
 
 const app = express();
-app.use('/images', express.static('images')); // Servir imagens estáticas
+app.use('/images', express.static('images'));
 app.use(express.json());
 
-// Estados das ações
 const actions = {
   sprint: false,
   walkForward: false,
@@ -28,6 +27,38 @@ const buttonActions = {
   imagem5: '/effect give @a night_vision 999 255',
   imagem6: '/weather clear',
 };
+
+let bot;
+
+function createBot() {
+  bot = mineflayer.createBot({
+    username: config['bot-account']['username'],
+    password: config['bot-account']['password'],
+    auth: config['bot-account']['type'],
+    host: config.server.ip,
+    port: config.server.port,
+    version: config.server.version,
+  });
+
+  bot.loadPlugin(pathfinder);
+
+  bot.once('spawn', () => {
+    logger.info('Bot entrou no servidor.');
+  });
+
+  bot.on('error', (err) => logger.error(`Erro: ${err.message}`));
+  bot.on('end', () => {
+    logger.warn('Bot desconectado. Tentando reconectar em 5 segundos...');
+    setTimeout(createBot, 5000); // Recria o bot após 5 segundos
+  });
+
+  bot.on('kicked', (reason) => {
+    logger.warn(`Bot foi expulso: ${reason}`);
+    setTimeout(createBot, 5000); // Recria o bot após 5 segundos
+  });
+
+  global.bot = bot;
+}
 
 app.get('/', (req, res) => {
   res.send(`
@@ -203,16 +234,16 @@ app.get('/get-actions', (req, res) => {
 
 app.post('/send-chat-message', (req, res) => {
   const { button } = req.body;
-  if (global.bot && buttonActions[button]) {
-    global.bot.chat(buttonActions[button]); // Envia a mensagem personalizada
+  if (bot && buttonActions[button]) {
+    bot.chat(buttonActions[button]);
   }
   res.sendStatus(200);
 });
 
 function controlBotActions() {
-  if (global.bot) {
-    global.bot.setControlState('forward', actions.walkForward);
-    global.bot.setControlState('sprint', actions.sprint);
+  if (bot) {
+    bot.setControlState('forward', actions.walkForward);
+    bot.setControlState('sprint', actions.sprint);
 
     if (actions.antiAfk) {
       startAntiAfk();
@@ -225,9 +256,9 @@ function controlBotActions() {
 function startAntiAfk() {
   if (!antiAfkInterval) {
     antiAfkInterval = setInterval(() => {
-      if (global.bot) {
-        const yaw = global.bot.entity.yaw + Math.PI / 2;
-        global.bot.look(yaw, global.bot.entity.pitch, true);
+      if (bot) {
+        const yaw = bot.entity.yaw + Math.PI / 2;
+        bot.look(yaw, bot.entity.pitch, true);
       }
     }, 5000);
   }
@@ -238,26 +269,6 @@ function stopAntiAfk() {
     clearInterval(antiAfkInterval);
     antiAfkInterval = null;
   }
-}
-
-function createBot() {
-  const bot = mineflayer.createBot({
-    username: config['bot-account']['username'],
-    password: config['bot-account']['password'],
-    auth: config['bot-account']['type'],
-    host: config.server.ip,
-    port: config.server.port,
-    version: config.server.version,
-  });
-
-  global.bot = bot;
-  bot.loadPlugin(pathfinder);
-
-  bot.once('spawn', () => {
-    logger.info('Bot entrou no servidor.');
-  });
-
-  bot.on('error', (err) => logger.error(err.message));
 }
 
 createBot();
