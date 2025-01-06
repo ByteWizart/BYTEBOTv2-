@@ -1,29 +1,32 @@
 const mineflayer = require('mineflayer');
 const express = require('express');
 const pathfinder = require('mineflayer-pathfinder').pathfinder;
-const Movements = require('mineflayer-pathfinder').Movements;
 
 const config = require('./settings.json');
 const loggers = require('./logging.js');
 const logger = loggers.logger;
-const app = express();
 
-app.use('/images', express.static('images'));
+const app = express();
+app.use('/images', express.static('images')); // Servir imagens estáticas
 app.use(express.json());
 
+// Estados das ações
 const actions = {
+  sprint: false,
   walkForward: false,
-  circle: false,
-  jump: false,
+  antiAfk: false,
 };
 
-const messages = {
-  button1: 'Mensagem do botão 1!',
-  button2: 'Mensagem do botão 2!',
-  button3: 'Mensagem do botão 3!',
-  button4: '/time set day',
-  button5: '/effect give @a night_vision 999 255',
-  button6: '/weather clear',
+let antiAfkInterval = null;
+
+// Configuração das ações dos botões
+const buttonActions = {
+  imagem1: 'Olá, mundo!',
+  imagem2: '/say Teste 2',
+  imagem3: 'Qualquer mensagem 3',
+  imagem4: '/time set day',
+  imagem5: '/effect give @a night_vision 999 255',
+  imagem6: '/weather clear',
 };
 
 app.get('/', (req, res) => {
@@ -36,7 +39,7 @@ app.get('/', (req, res) => {
       <title>Bot Controller</title>
       <style>
         body {
-          font-family: 'Arial', sans-serif;
+          font-family: Arial, sans-serif;
           background-color: #f0f0f0;
           margin: 0;
           display: flex;
@@ -45,222 +48,138 @@ app.get('/', (req, res) => {
           height: 100vh;
         }
         .container {
-          background-color: #fff;
-          padding: 20px;
+          background-color: white;
+          padding: 30px;
           border-radius: 10px;
           box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
           max-width: 600px;
           text-align: center;
         }
-        header h1 {
-          font-size: 24px;
-          color: #333;
-        }
         .buttons {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
-          margin: 20px 0;
+          gap: 15px;
+          margin-top: 20px;
         }
         button {
-          position: relative;
           width: 100px;
           height: 100px;
-          background: linear-gradient(135deg, #32a852, #1e90ff);
-          border: none;
           border-radius: 50%;
+          background-position: center;
+          background-repeat: no-repeat;
+          background-size: cover;
+          border: none;
           cursor: pointer;
-          overflow: hidden;
-          box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
-          transition: transform 0.2s ease, background-color 0.3s ease;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          transition: transform 0.2s;
         }
         button:hover {
           transform: translateY(-5px);
-          background: linear-gradient(135deg, #1e90ff, #32a852);
         }
-        button img {
-          width: 70%;
-          height: 70%;
-          object-fit: cover;
-          border-radius: 50%;
+        .switch-container {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 15px;
+          margin-top: 30px;
         }
-        .selectors {
-          margin: 20px 0;
-        }
-        label {
-          display: block;
-          margin: 5px 0;
-          font-weight: bold;
-          color: #555;
-        }
-        select {
-          width: 100%;
-          padding: 8px;
-          border-radius: 5px;
-          border: 1px solid #ccc;
-        }
-        #sendButton {
-          padding: 10px 20px;
-          background: #1e90ff;
-          color: white;
-          border: none;
-          border-radius: 5px;
-          cursor: pointer;
-          transition: background-color 0.3s ease;
-        }
-        #sendButton:hover {
-          background: #32a852;
-        }
-        .actionControls {
-          margin-top: 20px;
-          padding: 10px;
-          background-color: #f9f9f9;
-          border-radius: 10px;
-          box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
-        .actionControls h3 {
-          margin-bottom: 10px;
-          color: #333;
-        }
-        .actionButton {
+        .switch {
           display: flex;
-          justify-content: space-between;
+          flex-direction: column;
           align-items: center;
-          margin: 10px 0;
-        }
-        .actionButton label {
-          flex: 1;
-          text-align: left;
-          color: #555;
-          font-weight: bold;
+          justify-content: center;
+          gap: 10px;
         }
         .slider {
           position: relative;
           cursor: pointer;
           width: 60px;
           height: 34px;
-          background-color: #ccc;
-          transition: .4s;
+          background-color: #2196f3;
           border-radius: 34px;
+          transition: background-color 0.4s;
         }
         .slider:before {
+          content: '';
           position: absolute;
-          content: "";
           height: 26px;
           width: 26px;
           left: 4px;
           bottom: 4px;
           background-color: white;
-          transition: .4s;
           border-radius: 50%;
+          transition: transform 0.4s;
         }
         input:checked + .slider {
-          background-color: #4CAF50;
+          background-color: #4caf50;
         }
         input:checked + .slider:before {
           transform: translateX(26px);
         }
-        footer {
-          margin-top: 20px;
-        }
-        footer a {
-          color: #1a73e8;
-          text-decoration: none;
-        }
-        footer a:hover {
-          text-decoration: underline;
+        label {
+          font-size: 14px;
+          font-weight: bold;
         }
       </style>
     </head>
     <body>
       <div class="container">
-        <header>
-          <h1>Your Bot Is Ready!</h1>
-        </header>
+        <h1>Controle do Bot</h1>
         <div class="buttons">
-          <button id="button1" onclick="sendChatMessage('button1')">
-            <img src="/images/imagem1.png" alt="Imagem 1">
-          </button>
-          <button id="button2" onclick="sendChatMessage('button2')">
-            <img src="/images/imagem2.png" alt="Imagem 2">
-          </button>
-          <button id="button3" onclick="sendChatMessage('button3')">
-            <img src="/images/imagem3.png" alt="Imagem 3">
-          </button>
-          <button id="button4" onclick="sendChatMessage('button4')">
-            <img src="/images/imagem4.png" alt="Imagem 4">
-          </button>
-          <button id="button5" onclick="sendChatMessage('button5')">
-            <img src="/images/imagem5.png" alt="Imagem 5">
-          </button>
-          <button id="button6" onclick="sendChatMessage('button6')">
-            <img src="/images/imagem6.png" alt="Imagem 6">
-          </button>
+          <button onclick="sendChatMessage('imagem1')" style="background-image: url('/images/imagem1.png');"></button>
+          <button onclick="sendChatMessage('imagem2')" style="background-image: url('/images/imagem2.png');"></button>
+          <button onclick="sendChatMessage('imagem3')" style="background-image: url('/images/imagem3.png');"></button>
+          <button onclick="sendChatMessage('imagem4')" style="background-image: url('/images/imagem4.png');"></button>
+          <button onclick="sendChatMessage('imagem5')" style="background-image: url('/images/imagem5.png');"></button>
+          <button onclick="sendChatMessage('imagem6')" style="background-image: url('/images/imagem6.png');"></button>
         </div>
-
-        <div class="selectors">
-          <label for="fromPerson">Pessoa de Origem:</label>
-          <select id="fromPerson">
-            <option value="Steve">Steve</option>
-            <option value="Alex">Alex</option>
-            <option value="Herobrine">Herobrine</option>
-            <option value="Villager">Villager</option>
-          </select>
-          <label for="toPerson">Pessoa de Destino:</label>
-          <select id="toPerson">
-            <option value="Steve">Steve</option>
-            <option value="Alex">Alex</option>
-            <option value="Herobrine">Herobrine</option>
-            <option value="Villager">Villager</option>
-          </select>
-          <button id="sendButton" onclick="sendTeleportMessage()">Enviar</button>
-        </div>
-
-        <div class="actionControls">
-          <h3>Controles de Ação</h3>
-          <div class="actionButton">
-            <label for="walkForward">Andar para Frente</label>
-            <input type="checkbox" id="walkForward" onclick="toggleAction('walkForward')">
-            <span class="slider"></span>
+        <div class="switch-container">
+          <div class="switch">
+            <label>Corrida</label>
+            <label>
+              <input type="checkbox" id="sprint" onclick="toggleAction('sprint')">
+              <span class="slider"></span>
+            </label>
           </div>
-          <div class="actionButton">
-            <label for="circle">Circular</label>
-            <input type="checkbox" id="circle" onclick="toggleAction('circle')">
-            <span class="slider"></span>
+          <div class="switch">
+            <label>Andar para Frente</label>
+            <label>
+              <input type="checkbox" id="walkForward" onclick="toggleAction('walkForward')">
+              <span class="slider"></span>
+            </label>
           </div>
-          <div class="actionButton">
-            <label for="jump">Pular</label>
-            <input type="checkbox" id="jump" onclick="toggleAction('jump')">
-            <span class="slider"></span>
+          <div class="switch">
+            <label>Anti-AFK</label>
+            <label>
+              <input type="checkbox" id="antiAfk" onclick="toggleAction('antiAfk')">
+              <span class="slider"></span>
+            </label>
           </div>
         </div>
-
-        <footer>
-          <p>Créditos à: <a href="https://youtube.com/@H2N_OFFICIAL?si=UOLwjqUv-C1mWkn4">H2N OFFICIAL</a></p>
-        </footer>
       </div>
-
       <script>
+        window.onload = () => {
+          fetch('/get-actions')
+            .then(res => res.json())
+            .then(data => {
+              Object.keys(data).forEach(action => {
+                document.getElementById(action).checked = data[action];
+              });
+            });
+        };
+
         function toggleAction(action) {
+          const state = document.getElementById(action).checked;
           fetch('/toggle-action', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action }),
-          }).then(res => res.json()).then(data => {
-            console.log(data);
+            body: JSON.stringify({ action, state }),
           });
         }
 
-function sendTeleportMessage() {
-          const fromPerson = document.getElementById('fromPerson').value;
-          const toPerson = document.getElementById('toPerson').value;
-          fetch('/send-tp-message', {
+        function sendChatMessage(button) {
+          fetch('/send-chat-message', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fromPerson, toPerson }),
+            body: JSON.stringify({ button }),
           });
         }
       </script>
@@ -269,45 +188,57 @@ function sendTeleportMessage() {
   `);
 });
 
-app.post('/send-chat-message', (req, res) => {
-  const { button } = req.body;
-  if (global.bot && messages[button]) {
-    global.bot.chat(messages[button]);
-  }
-  res.sendStatus(200);
-});
-
-app.post('/send-tp-message', (req, res) => {
-  const { fromPerson, toPerson } = req.body;
-  if (global.bot) {
-    global.bot.chat(`/tp ${fromPerson} ${toPerson}`);
-  }
-  res.sendStatus(200);
-});
-
 app.post('/toggle-action', (req, res) => {
-  const { action } = req.body;
+  const { action, state } = req.body;
   if (actions.hasOwnProperty(action)) {
-    actions[action] = !actions[action];
+    actions[action] = state;
     controlBotActions();
   }
-  res.json({ action, state: actions[action] });
+  res.sendStatus(200);
+});
+
+app.get('/get-actions', (req, res) => {
+  res.json(actions);
+});
+
+app.post('/send-chat-message', (req, res) => {
+  const { button } = req.body;
+  if (global.bot && buttonActions[button]) {
+    global.bot.chat(buttonActions[button]); // Envia a mensagem personalizada
+  }
+  res.sendStatus(200);
 });
 
 function controlBotActions() {
   if (global.bot) {
     global.bot.setControlState('forward', actions.walkForward);
-    if (actions.circle) {
-      global.bot.setControlState('forward', true);
-      global.bot.setControlState('left', true);
+    global.bot.setControlState('sprint', actions.sprint);
+
+    if (actions.antiAfk) {
+      startAntiAfk();
     } else {
-      global.bot.setControlState('left', false);
+      stopAntiAfk();
     }
-    global.bot.setControlState('jump', actions.jump);
   }
 }
 
-app.listen(3000);
+function startAntiAfk() {
+  if (!antiAfkInterval) {
+    antiAfkInterval = setInterval(() => {
+      if (global.bot) {
+        const yaw = global.bot.entity.yaw + Math.PI / 2;
+        global.bot.look(yaw, global.bot.entity.pitch, true);
+      }
+    }, 5000);
+  }
+}
+
+function stopAntiAfk() {
+  if (antiAfkInterval) {
+    clearInterval(antiAfkInterval);
+    antiAfkInterval = null;
+  }
+}
 
 function createBot() {
   const bot = mineflayer.createBot({
@@ -322,17 +253,12 @@ function createBot() {
   global.bot = bot;
   bot.loadPlugin(pathfinder);
 
-  const mcData = require('minecraft-data')(bot.version);
-  const defaultMove = new Movements(bot, mcData);
-  defaultMove.canDig = false;  // Desabilita cavar para maior velocidade
-
-  bot.pathfinder.setMovements(defaultMove);
-
   bot.once('spawn', () => {
-    logger.info("Bot joined to the server");
+    logger.info('Bot entrou no servidor.');
   });
 
   bot.on('error', (err) => logger.error(err.message));
 }
 
 createBot();
+app.listen(3000, () => logger.info('Servidor rodando na porta 3000.'));
