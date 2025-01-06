@@ -5,20 +5,12 @@ const pathfinder = require('mineflayer-pathfinder').pathfinder;
 const config = require('./settings.json');
 const loggers = require('./logging.js');
 const logger = loggers.logger;
-
 const app = express();
+
 app.use('/images', express.static('images'));
 app.use(express.json());
 
-const actions = {
-  sprint: false,
-  walkForward: false,
-  antiAfk: false,
-};
-
-let antiAfkInterval = null;
-
-// Configuração das ações dos botões
+// Configuração dos botões
 const buttonActions = {
   imagem1: 'Olá, mundo!',
   imagem2: '/say Teste 2',
@@ -28,38 +20,16 @@ const buttonActions = {
   imagem6: '/weather clear',
 };
 
-let bot;
+// Estados dos switches
+const switches = {
+  walkForward: false,
+  sprint: false,
+  antiAfk: false,
+};
 
-function createBot() {
-  bot = mineflayer.createBot({
-    username: config['bot-account']['username'],
-    password: config['bot-account']['password'],
-    auth: config['bot-account']['type'],
-    host: config.server.ip,
-    port: config.server.port,
-    version: config.server.version,
-  });
+let antiAfkInterval = null;
 
-  bot.loadPlugin(pathfinder);
-
-  bot.once('spawn', () => {
-    logger.info('Bot entrou no servidor.');
-  });
-
-  bot.on('error', (err) => logger.error(`Erro: ${err.message}`));
-  bot.on('end', () => {
-    logger.warn('Bot desconectado. Tentando reconectar em 5 segundos...');
-    setTimeout(createBot, 5000); // Recria o bot após 5 segundos
-  });
-
-  bot.on('kicked', (reason) => {
-    logger.warn(`Bot foi expulso: ${reason}`);
-    setTimeout(createBot, 5000); // Recria o bot após 5 segundos
-  });
-
-  global.bot = bot;
-}
-
+// HTML da interface
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -67,7 +37,7 @@ app.get('/', (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Bot Controller</title>
+      <title>Controle do Bot</title>
       <style>
         body {
           font-family: Arial, sans-serif;
@@ -80,7 +50,7 @@ app.get('/', (req, res) => {
         }
         .container {
           background-color: white;
-          padding: 30px;
+          padding: 20px;
           border-radius: 10px;
           box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
           max-width: 600px;
@@ -89,65 +59,61 @@ app.get('/', (req, res) => {
         .buttons {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 15px;
-          margin-top: 20px;
+          gap: 10px;
         }
         button {
           width: 100px;
           height: 100px;
           border-radius: 50%;
-          background-position: center;
-          background-repeat: no-repeat;
-          background-size: cover;
           border: none;
+          background: linear-gradient(135deg, #1e90ff, #32a852);
           cursor: pointer;
-          transition: transform 0.2s;
+          box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+          transition: transform 0.2s, background-color 0.3s;
         }
         button:hover {
           transform: translateY(-5px);
+          background: linear-gradient(135deg, #32a852, #1e90ff);
+        }
+        button img {
+          width: 70%;
+          height: 70%;
+          border-radius: 50%;
         }
         .switch-container {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 15px;
-          margin-top: 30px;
+          margin-top: 20px;
         }
         .switch {
           display: flex;
-          flex-direction: column;
           align-items: center;
-          justify-content: center;
-          gap: 10px;
+          justify-content: space-between;
+          margin-bottom: 10px;
         }
         .slider {
-          position: relative;
+          width: 50px;
+          height: 24px;
+          background: #ccc;
+          border-radius: 50px;
           cursor: pointer;
-          width: 60px;
-          height: 34px;
-          background-color: #2196f3;
-          border-radius: 34px;
-          transition: background-color 0.4s;
+          position: relative;
+          transition: background 0.4s;
         }
-        .slider:before {
-          content: '';
+        .slider::before {
+          content: "";
+          width: 20px;
+          height: 20px;
+          background: white;
           position: absolute;
-          height: 26px;
-          width: 26px;
-          left: 4px;
-          bottom: 4px;
-          background-color: white;
+          top: 2px;
+          left: 2px;
           border-radius: 50%;
-          transition: transform 0.4s;
+          transition: transform 0.3s;
         }
         input:checked + .slider {
-          background-color: #4caf50;
+          background: #4caf50;
         }
-        input:checked + .slider:before {
+        input:checked + .slider::before {
           transform: translateX(26px);
-        }
-        label {
-          font-size: 14px;
-          font-weight: bold;
         }
       </style>
     </head>
@@ -155,62 +121,43 @@ app.get('/', (req, res) => {
       <div class="container">
         <h1>Controle do Bot</h1>
         <div class="buttons">
-          <button onclick="sendChatMessage('imagem1')" style="background-image: url('/images/imagem1.png');"></button>
-          <button onclick="sendChatMessage('imagem2')" style="background-image: url('/images/imagem2.png');"></button>
-          <button onclick="sendChatMessage('imagem3')" style="background-image: url('/images/imagem3.png');"></button>
-          <button onclick="sendChatMessage('imagem4')" style="background-image: url('/images/imagem4.png');"></button>
-          <button onclick="sendChatMessage('imagem5')" style="background-image: url('/images/imagem5.png');"></button>
-          <button onclick="sendChatMessage('imagem6')" style="background-image: url('/images/imagem6.png');"></button>
+          ${Object.keys(buttonActions).map(
+            (key) => `
+              <button onclick="sendAction('${key}')">
+                <img src="/images/${key}.png" alt="${key}">
+              </button>
+            `
+          ).join('')}
         </div>
         <div class="switch-container">
-          <div class="switch">
-            <label>Corrida</label>
-            <label>
-              <input type="checkbox" id="sprint" onclick="toggleAction('sprint')">
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="switch">
-            <label>Andar para Frente</label>
-            <label>
-              <input type="checkbox" id="walkForward" onclick="toggleAction('walkForward')">
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="switch">
-            <label>Anti-AFK</label>
-            <label>
-              <input type="checkbox" id="antiAfk" onclick="toggleAction('antiAfk')">
-              <span class="slider"></span>
-            </label>
-          </div>
+          ${Object.keys(switches).map(
+            (key) => `
+              <div class="switch">
+                <span>${key.charAt(0).toUpperCase() + key.slice(1)}</span>
+                <label>
+                  <input type="checkbox" id="${key}" onchange="toggleSwitch('${key}')">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            `
+          ).join('')}
         </div>
       </div>
       <script>
-        window.onload = () => {
-          fetch('/get-actions')
-            .then(res => res.json())
-            .then(data => {
-              Object.keys(data).forEach(action => {
-                document.getElementById(action).checked = data[action];
-              });
-            });
-        };
-
-        function toggleAction(action) {
-          const state = document.getElementById(action).checked;
-          fetch('/toggle-action', {
+        function sendAction(action) {
+          fetch('/button-action', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action, state }),
+            body: JSON.stringify({ action }),
           });
         }
 
-        function sendChatMessage(button) {
-          fetch('/send-chat-message', {
+        function toggleSwitch(switchName) {
+          const state = document.getElementById(switchName).checked;
+          fetch('/toggle-switch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ button }),
+            body: JSON.stringify({ switchName, state }),
           });
         }
       </script>
@@ -219,33 +166,31 @@ app.get('/', (req, res) => {
   `);
 });
 
-app.post('/toggle-action', (req, res) => {
-  const { action, state } = req.body;
-  if (actions.hasOwnProperty(action)) {
-    actions[action] = state;
-    controlBotActions();
+// Ações dos botões
+app.post('/button-action', (req, res) => {
+  const { action } = req.body;
+  if (buttonActions[action] && global.bot) {
+    global.bot.chat(buttonActions[action]);
   }
   res.sendStatus(200);
 });
 
-app.get('/get-actions', (req, res) => {
-  res.json(actions);
-});
-
-app.post('/send-chat-message', (req, res) => {
-  const { button } = req.body;
-  if (bot && buttonActions[button]) {
-    bot.chat(buttonActions[button]);
+// Alternar switches
+app.post('/toggle-switch', (req, res) => {
+  const { switchName, state } = req.body;
+  if (switches.hasOwnProperty(switchName)) {
+    switches[switchName] = state;
+    controlBot();
   }
   res.sendStatus(200);
 });
 
-function controlBotActions() {
-  if (bot) {
-    bot.setControlState('forward', actions.walkForward);
-    bot.setControlState('sprint', actions.sprint);
+function controlBot() {
+  if (global.bot) {
+    global.bot.setControlState('forward', switches.walkForward);
+    global.bot.setControlState('sprint', switches.sprint);
 
-    if (actions.antiAfk) {
+    if (switches.antiAfk) {
       startAntiAfk();
     } else {
       stopAntiAfk();
@@ -256,9 +201,9 @@ function controlBotActions() {
 function startAntiAfk() {
   if (!antiAfkInterval) {
     antiAfkInterval = setInterval(() => {
-      if (bot) {
-        const yaw = bot.entity.yaw + Math.PI / 2;
-        bot.look(yaw, bot.entity.pitch, true);
+      if (global.bot) {
+        const yaw = global.bot.entity.yaw + Math.PI / 2;
+        global.bot.look(yaw, global.bot.entity.pitch, true);
       }
     }, 5000);
   }
@@ -269,6 +214,29 @@ function stopAntiAfk() {
     clearInterval(antiAfkInterval);
     antiAfkInterval = null;
   }
+}
+
+// Reconexão do bot
+function createBot() {
+  const bot = mineflayer.createBot({
+    host: config.server.ip,
+    port: config.server.port,
+    username: config['bot-account']['username'],
+    password: config['bot-account']['password'],
+    auth: config['bot-account']['type'],
+  });
+
+  global.bot = bot;
+
+  bot.loadPlugin(pathfinder);
+
+  bot.once('spawn', () => logger.info('Bot conectado com sucesso.'));
+  bot.on('end', () => {
+    logger.warn('Bot desconectado. Tentando reconectar em 5 segundos...');
+    setTimeout(createBot, 5000);
+  });
+  bot.on('kicked', (reason) => logger.error(`Bot foi expulso: ${reason}`));
+  bot.on('error', (err) => logger.error(err));
 }
 
 createBot();
