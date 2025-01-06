@@ -1,8 +1,3 @@
-.on('error', (err) => logger.error(err));
-}
-
-createBot();
-app.listen(3000, () => logger.info('Servidor rodando na porta 3000.'));
 const mineflayer = require('mineflayer');
 const express = require('express');
 const pathfinder = require('mineflayer-pathfinder').pathfinder;
