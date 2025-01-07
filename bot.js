@@ -13,9 +13,9 @@ app.use(express.json());
 
 // Estados das ações
 const actions = {
-  sprint: false,
-  walkForward: false,
-  antiAfk: false,
+  sprint: true,
+  walkForward: true,
+  antiAfk: true,
 };
 
 // Referência do bot global
