@@ -23,7 +23,7 @@ let antiAfkInterval = null;
 
 // Mensagens personalizadas para botões
 const messages = {
-  imagem1: 'Mensagem personalizada 1',
+  imagem1: '/oa accept',
   imagem2: 'Mensagem personalizada 2',
   imagem3: 'Mensagem personalizada 3',
   imagem4: '/time set day',
