@@ -6,7 +6,7 @@
   },
 
   "server": {
-    "ip": "BYTEserver.aternos.me",
+    "ip": "BYTEServer.aternos.me",
     "port": 12444,
     "version": "1.14"
   },
